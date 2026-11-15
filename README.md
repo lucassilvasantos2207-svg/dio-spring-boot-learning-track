@@ -134,3 +134,55 @@ cd 01-spring-web
 ```
 
 For module-specific details, always check each module README from the links above.
+---
+
+## Minha melhoria: validação de transações antes de salvar
+
+### O que foi implementado
+Antes, qualquer transação era salva sem checagem, mesmo com valor negativo ou descrição vazia. Agora o `PersistTransactionUseCase` valida os dados com Bean Validation antes de chamar o repositório.
+
+Regras (em `PersistTransactionInput`):
+- `description`: obrigatória, não pode estar em branco
+- `amount`: maior que zero (em centavos)
+- `category`: obrigatória
+
+### Por que a validação fica no caso de uso
+O `PersistTransactionUseCase` é chamado de dois caminhos: pelo endpoint `POST /transactions` e pela **Tool** que a IA usa quando recebe um comando de voz. Validando dentro do caso de uso, os dois caminhos ficam protegidos com uma regra só.
+
+Quando algo é inválido, o caso de uso lança `ConstraintViolationException` e nada é salvo. O novo `ApiExceptionHandler` transforma esse erro em **HTTP 400**, com a mensagem de cada campo inválido.
+
+### Arquivos alterados
+- `build.gradle`: dependência `spring-boot-starter-validation`
+- `PersistTransactionInput.java`: anotações de validação
+- `PersistTransactionUseCase.java`: validação antes de salvar
+- `ApiExceptionHandler.java` (novo): resposta 400 com as mensagens
+- `PersistTransactionUseCaseTest.java` (novo): 4 testes do caso de uso
+- `ApiExceptionHandlerTest.java` (novo): teste do formato do erro 400
+
+### Como testar
+Testes automatizados da melhoria:
+
+```bash
+./gradlew test --tests "*PersistTransactionUseCaseTest" --tests "*ApiExceptionHandlerTest"
+```
+
+Teste manual (com o projeto rodando, Docker aberto e a chave da OpenAI em variável de ambiente):
+
+```bash
+curl -X POST http://localhost:8080/transactions \
+  -H "Content-Type: application/json" \
+  -d '{"description":"","amount":-5,"category":"VALOR_DO_ENUM"}'
+```
+
+Resposta esperada: HTTP 400 com a mensagem de cada campo inválido.
+
+> Observação: o teste `BudgetingApplicationTests` (já existente no projeto) sobe a aplicação inteira e precisa do MySQL e da chave da OpenAI. Sem eles ele falha, independente da minha melhoria.
+
+### Tecnologias
+Java 25, Spring Boot 4, Spring AI, Spring Data JPA, MySQL, Bean Validation, JUnit 5, Mockito, Gradle
+
+### O que aprendi
+(escreva aqui com suas palavras. Algumas ideias:
+- como o Tool Calling faz a IA chamar um método real da aplicação
+- por que colocar a validação no caso de uso e não só no controller
+- o que foi mais difícil, como instalar o JDK 25 ou mexer em um projeto novo)
